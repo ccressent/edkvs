@@ -15,4 +15,11 @@ defmodule EKVS.RegistryTest do
     EDKVS.Bucket.put(bucket, "milk", 1)
     assert EDKVS.Bucket.get(bucket, "milk") == 1
   end
+
+  test "updates if a bucket disappears", %{registry: registry} do
+    EDKVS.Registry.create(registry, "test")
+    {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+    Agent.stop(bucket)
+    assert EDKVS.Registry.lookup(registry, "test") == :error
+  end
 end
