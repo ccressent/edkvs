@@ -1,8 +1,20 @@
 defmodule EKVS.RegistryTest do
   use ExUnit.Case, async: true
 
+  defmodule Forwarder do
+    use GenEvent
+
+    def handle_event(event, parent) do
+      send parent, event
+      {:ok, parent}
+    end
+  end
+
   setup do
-    {:ok, registry} = EDKVS.Registry.start_link
+    {:ok, manager}  = GenEvent.start_link
+    {:ok, registry} = EDKVS.Registry.start_link(manager)
+
+    GenEvent.add_mon_handler(manager, Forwarder, self())
     {:ok, registry: registry}
   end
 
@@ -21,5 +33,14 @@ defmodule EKVS.RegistryTest do
     {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
     Agent.stop(bucket)
     assert EDKVS.Registry.lookup(registry, "test") == :error
+  end
+
+  test "sends events on create and crash", %{registry: registry} do
+    EDKVS.Registry.create(registry, "test")
+    {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+    assert_receive {:create, "test", ^bucket}
+
+    Agent.stop(bucket)
+    assert_receive {:exit, "test", ^bucket}
   end
 end

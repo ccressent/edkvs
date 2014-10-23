@@ -4,8 +4,8 @@ defmodule EDKVS.Registry do
   @doc """
   Starts the registry.
   """
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, :ok, opts)
+  def start_link(event_manager, opts \\ []) do
+    GenServer.start_link(__MODULE__, event_manager, opts)
   end
 
   @doc """
@@ -32,36 +32,40 @@ defmodule EDKVS.Registry do
   end
 
 
-  def init(:ok) do
+  def init(events) do
     names = HashDict.new
     refs  = HashDict.new
-    {:ok, {names, refs}}
+    {:ok, %{names: names, refs: refs, events: events}}
   end
 
-  def handle_call({:lookup, name}, _from, {names, _} = state) do
-    {:reply, HashDict.fetch(names, name), state}
+  def handle_call({:lookup, name}, _from, state) do
+    {:reply, HashDict.fetch(state.names, name), state}
   end
 
   def handle_call(:stop, _from, state) do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_cast({:create, name}, {names, refs}) do
-    if HashDict.get(names, name) do
-      {:noreply, {names, refs}}
+  def handle_cast({:create, name}, state) do
+    if HashDict.get(state.names, name) do
+      {:noreply, state}
     else
       {:ok, bucket} = EDKVS.Bucket.start_link()
       ref   = Process.monitor(bucket)
-      refs  = HashDict.put(refs, ref, name)
-      names = HashDict.put(names, name, bucket)
-      {:noreply, {names, refs}}
+      refs  = HashDict.put(state.refs, ref, name)
+      names = HashDict.put(state.names, name, bucket)
+
+      GenEvent.sync_notify(state.events, {:create, name, bucket})
+      {:noreply, %{state | names: names, refs: refs}}
     end
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, {names, refs}) do
-    {name, ref} = HashDict.pop(refs, ref)
-    names = HashDict.delete(names, name)
-    {:noreply, {names, refs}}
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    {name, refs} = HashDict.pop(state.refs, ref)
+    names = HashDict.delete(state.names, name)
+
+    GenEvent.sync_notify(state.events, {:exit, name, pid})
+    {:noreply, %{state | names: names, refs: refs}}
   end
 
   def handle_info(_msg, state) do
