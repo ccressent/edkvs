@@ -11,8 +11,9 @@ defmodule EKVS.RegistryTest do
   end
 
   setup do
+    {:ok, sup}      = EDKVS.Bucket.Supervisor.start_link
     {:ok, manager}  = GenEvent.start_link
-    {:ok, registry} = EDKVS.Registry.start_link(manager)
+    {:ok, registry} = EDKVS.Registry.start_link(manager, sup)
 
     GenEvent.add_mon_handler(manager, Forwarder, self())
     {:ok, registry: registry}
@@ -42,5 +43,14 @@ defmodule EKVS.RegistryTest do
 
     Agent.stop(bucket)
     assert_receive {:exit, "test", ^bucket}
+  end
+
+  test "removes bucket on crash", %{registry: registry} do
+    EDKVS.Registry.create(registry, "test")
+    {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+
+    Process.exit(bucket, :shutdown)
+    assert_receive {:exit, "test", ^bucket}
+    assert EDKVS.Registry.lookup(registry, "test") == :error
   end
 end
