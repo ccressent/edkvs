@@ -11,13 +11,20 @@ defmodule EDKVS.RegistryTest do
   end
 
   setup do
+    ets      = :ets.new(:registry_table, [:set, :public])
+    registry = start_registry(ets)
+    {:ok, registry: registry, ets: ets}
+  end
+
+  defp start_registry(ets) do
     {:ok, sup}      = EDKVS.Bucket.Supervisor.start_link
     {:ok, manager}  = GenEvent.start_link
-    {:ok, registry} = EDKVS.Registry.start_link(:registry_table, manager, sup)
+    {:ok, registry} = EDKVS.Registry.start_link(ets, manager, sup)
 
     GenEvent.add_mon_handler(manager, Forwarder, self())
-    {:ok, registry: registry, ets: :registry_table}
+    registry
   end
+
 
   test "spawn and fetches buckets", %{registry: registry, ets: ets} do
     assert EDKVS.Registry.lookup(ets, "test") == :error
@@ -52,6 +59,30 @@ defmodule EDKVS.RegistryTest do
     {:ok, bucket} = EDKVS.Registry.lookup(ets, "test")
 
     Process.exit(bucket, :shutdown)
+    assert_receive {:exit, "test", ^bucket}
+    assert EDKVS.Registry.lookup(ets, "test") == :error
+  end
+
+  test "can lookup existing buckets after crash", %{registry: registry, ets: ets} do
+    EDKVS.Registry.create(registry, "test")
+
+    Process.unlink(registry)
+    Process.exit(registry, :shutdown)
+    start_registry(ets)
+
+    assert EDKVS.Registry.lookup(ets, "test") != :error
+  end
+
+  test "monitors existing buckets", %{registry: registry, ets: ets} do
+    EDKVS.Registry.create(registry, "test")
+
+    Process.unlink(registry)
+    Process.exit(registry, :shutdown)
+    start_registry(ets)
+
+    {:ok, bucket} = EDKVS.Registry.lookup(ets, "test")
+    Process.exit(bucket, :shutdown)
+
     assert_receive {:exit, "test", ^bucket}
     assert EDKVS.Registry.lookup(ets, "test") == :error
   end
