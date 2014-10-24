@@ -1,4 +1,4 @@
-# elixirDKVS
+# edkvs - Elixir Distributed Key-Value Store
 
 A simple [Distributed Key-Value Store][1] written in [Elixir][2].
 
