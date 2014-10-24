@@ -1,4 +1,4 @@
-defmodule EKVS.RegistryTest do
+defmodule EDKVS.RegistryTest do
   use ExUnit.Case, async: true
 
   defmodule Forwarder do
@@ -13,44 +13,46 @@ defmodule EKVS.RegistryTest do
   setup do
     {:ok, sup}      = EDKVS.Bucket.Supervisor.start_link
     {:ok, manager}  = GenEvent.start_link
-    {:ok, registry} = EDKVS.Registry.start_link(manager, sup)
+    {:ok, registry} = EDKVS.Registry.start_link(:registry_table, manager, sup)
 
     GenEvent.add_mon_handler(manager, Forwarder, self())
-    {:ok, registry: registry}
+    {:ok, registry: registry, ets: :registry_table}
   end
 
-  test "spawn and fetches buckets", %{registry: registry} do
-    assert EDKVS.Registry.lookup(registry, "test") == :error
+  test "spawn and fetches buckets", %{registry: registry, ets: ets} do
+    assert EDKVS.Registry.lookup(ets, "test") == :error
 
     EDKVS.Registry.create(registry, "test")
-    assert {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+    assert {:ok, bucket} = EDKVS.Registry.lookup(ets, "test")
 
     EDKVS.Bucket.put(bucket, "milk", 1)
     assert EDKVS.Bucket.get(bucket, "milk") == 1
   end
 
-  test "updates if a bucket disappears", %{registry: registry} do
+  test "updates if a bucket disappears", %{registry: registry, ets: ets} do
     EDKVS.Registry.create(registry, "test")
-    {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+    {:ok, bucket} = EDKVS.Registry.lookup(ets, "test")
+
     Agent.stop(bucket)
-    assert EDKVS.Registry.lookup(registry, "test") == :error
+    assert_receive {:exit, "test", ^bucket}
+    assert EDKVS.Registry.lookup(ets, "test") == :error
   end
 
-  test "sends events on create and crash", %{registry: registry} do
+  test "sends events on create and crash", %{registry: registry, ets: ets} do
     EDKVS.Registry.create(registry, "test")
-    {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+    {:ok, bucket} = EDKVS.Registry.lookup(ets, "test")
     assert_receive {:create, "test", ^bucket}
 
     Agent.stop(bucket)
     assert_receive {:exit, "test", ^bucket}
   end
 
-  test "removes bucket on crash", %{registry: registry} do
+  test "removes bucket on crash", %{registry: registry, ets: ets} do
     EDKVS.Registry.create(registry, "test")
-    {:ok, bucket} = EDKVS.Registry.lookup(registry, "test")
+    {:ok, bucket} = EDKVS.Registry.lookup(ets, "test")
 
     Process.exit(bucket, :shutdown)
     assert_receive {:exit, "test", ^bucket}
-    assert EDKVS.Registry.lookup(registry, "test") == :error
+    assert EDKVS.Registry.lookup(ets, "test") == :error
   end
 end
