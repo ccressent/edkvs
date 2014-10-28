@@ -29,20 +29,28 @@ defmodule EDKVSServer do
     loop_acceptor(socket)
   end
 
-  defp serve(client) do
-    client
-    |> read_line()
-    |> write_line(client)
+  defp serve(socket) do
+    import Pipe
 
-    serve(client)
+    msg = pipe_matching x, {:ok, x},
+          read_line(socket)
+          |> EDKVSServer.Command.parse()
+          |> EDKVSServer.Command.run()
+
+    write_line(socket, msg)
+    serve(socket)
   end
 
   defp read_line(socket) do
-    {:ok, data} = :gen_tcp.recv(socket, 0)
-    data
+    :gen_tcp.recv(socket, 0)
   end
 
-  defp write_line(line, socket) do
-    :gen_tcp.send(socket, line)
+  defp write_line(socket, msg) do
+    :gen_tcp.send(socket, format_msg(msg))
   end
+
+  defp format_msg({:ok, text}), do: text
+  defp format_msg({:error, :unknown_command}), do: "UNKNOWN COMMAND\r\n"
+  defp format_msg({:error, :not_found}), do: "NOT FOUND\r\n"
+  defp format_msg({:error, _}), do: "ERROR\r\n"
 end
