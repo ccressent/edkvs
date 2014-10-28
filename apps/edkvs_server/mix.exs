@@ -14,7 +14,7 @@ defmodule EDKVSServer.Mixfile do
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:logger, :edkvs],
+    [applications: [:logger, :pipe, :edkvs],
      mod: {EDKVSServer, []}]
   end
 
@@ -32,6 +32,7 @@ defmodule EDKVSServer.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    [{:edkvs, in_umbrella: true}]
+    [{:edkvs, in_umbrella: true},
+     {:pipe, github: "batate/elixir-pipes"}]
   end
 end
