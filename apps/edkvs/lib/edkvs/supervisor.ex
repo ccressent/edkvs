@@ -15,6 +15,7 @@ defmodule EDKVS.Supervisor do
                                         {:read_concurrency, true}])
 
     children = [
+      supervisor(Task.Supervisor, [[name: EDKVS.RouterTasks]]),
       worker(GenEvent, [[name: @manager_name]]),
       supervisor(EDKVS.Bucket.Supervisor, [[name: @bucket_supervisor_name]]),
       worker(EDKVS.Registry, [ets, @manager_name, @bucket_supervisor_name,
